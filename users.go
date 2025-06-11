@@ -102,9 +102,55 @@ func (cfg *apiConfig) handlerUsers(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		log.Fatalf("unable to create user: %v", err)
+		respondWithError(w, http.StatusInternalServerError, "unable to create user", err)
+		return
 	}
 
 	respondWithJSON(w, http.StatusCreated, respBody{
+		Id:        user.ID,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Email:     user.Email,
+	})
+}
+
+func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Request) {
+	decoder := json.NewDecoder(r.Body)
+	body := reqBody{}
+	err := decoder.Decode(&body)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't decode parameters", err)
+		return
+	}
+
+	authorization := r.Header.Get("Authorization")
+	if authorization == "" {
+		respondWithError(w, http.StatusUnauthorized, "no authorization header found", errors.New("no authorization header provided"))
+		return
+	}
+	token := strings.Split(authorization, "Bearer ")[1]
+
+	userID, err := auth.ValidateJWT(token, cfg.signingSecret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "token invalid", err)
+		return
+	}
+
+	hpw, err := auth.HashPassword(body.Password)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to hash password", err)
+		return
+	}
+	user, err := cfg.db.UpdateUser(context.Background(), database.UpdateUserParams{
+		ID:             userID,
+		Email:          body.Email,
+		HashedPassword: hpw,
+	})
+	if err != nil {
+		log.Fatalf("unable to create user: %v", err)
+	}
+
+	respondWithJSON(w, http.StatusOK, respBody{
 		Id:        user.ID,
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
@@ -129,8 +175,10 @@ func (cfg *apiConfig) handlerRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if refreshToken.ExpiresAt.Before(time.Now()) {
 		respondWithError(w, http.StatusUnauthorized, "refresh token is expired", errors.New("refresh token is expired"))
+		return
 	} else if refreshToken.RevokedAt.Valid {
 		respondWithError(w, http.StatusUnauthorized, "refresh token is revoked", errors.New("refresh token is revoked"))
+		return
 	}
 
 	authToken, err := auth.MakeJWT(refreshToken.UserID, cfg.signingSecret, 1*time.Hour)

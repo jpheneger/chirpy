@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -128,4 +130,42 @@ func (cfg *apiConfig) handlerChirps(w http.ResponseWriter, r *http.Request) {
 		Body:      newChirp.Body,
 		UserId:    newChirp.UserID,
 	})
+}
+
+func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, r *http.Request) {
+	authorization := r.Header.Get("Authorization")
+	if authorization == "" {
+		respondWithError(w, http.StatusUnauthorized, "no authorization header found", errors.New("no authorization header provided"))
+		return
+	}
+	token := strings.Split(authorization, "Bearer ")[1]
+	userId, err := auth.ValidateJWT(token, cfg.signingSecret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid JWT token", err)
+		return
+	}
+
+	reqChirpId := r.PathValue("chirpID")
+	chirpId := uuid.MustParse(reqChirpId)
+
+	chirp, err := cfg.db.GetChirpById(context.Background(), chirpId)
+	if err != nil {
+		respondWithError(w, http.StatusForbidden, "Unable to fetch chrip by ID: "+chirpId.String(), err)
+		return
+	}
+
+	if chirp.UserID != userId {
+		respondWithError(w, http.StatusForbidden, "user is not chrip owner", err)
+		return
+	}
+
+	err = cfg.db.DeleteChripById(context.Background(), database.DeleteChripByIdParams{
+		ID:     chirpId,
+		UserID: userId,
+	})
+	if err != nil {
+		respondWithError(w, http.StatusForbidden, "Unable to delete chrip by ID: "+chirpId.String(), err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
