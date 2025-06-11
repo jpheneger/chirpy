@@ -25,6 +25,7 @@ type respBody struct {
 	Email        string    `json:"email"`
 	AccessToken  string    `json:"token"`
 	RefreshToken string    `json:"refresh_token"`
+	IsChirpyRed  bool      `json:"is_chirpy_red"`
 }
 
 func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
@@ -77,6 +78,7 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:    user.CreatedAt,
 		UpdatedAt:    user.UpdatedAt,
 		Email:        user.Email,
+		IsChirpyRed:  user.IsChirpyRed.Bool,
 		AccessToken:  accessToken,
 		RefreshToken: result.Token,
 	})
@@ -107,10 +109,11 @@ func (cfg *apiConfig) handlerUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondWithJSON(w, http.StatusCreated, respBody{
-		Id:        user.ID,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Email:     user.Email,
+		Id:          user.ID,
+		CreatedAt:   user.CreatedAt,
+		UpdatedAt:   user.UpdatedAt,
+		Email:       user.Email,
+		IsChirpyRed: user.IsChirpyRed.Bool,
 	})
 }
 
@@ -151,10 +154,11 @@ func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Request) 
 	}
 
 	respondWithJSON(w, http.StatusOK, respBody{
-		Id:        user.ID,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Email:     user.Email,
+		Id:          user.ID,
+		CreatedAt:   user.CreatedAt,
+		UpdatedAt:   user.UpdatedAt,
+		Email:       user.Email,
+		IsChirpyRed: user.IsChirpyRed.Bool,
 	})
 }
 
@@ -207,4 +211,40 @@ func (cfg *apiConfig) handlerRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (cfg *apiConfig) handlerUpgrade(w http.ResponseWriter, r *http.Request) {
+	type data struct {
+		UserId string `json:"user_id"`
+	}
+	type reqBody struct {
+		Event string `json:"event"`
+		Data  data
+	}
+
+	polkaKey := cfg.polkaKey
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil || polkaKey != apiKey {
+		respondWithError(w, http.StatusUnauthorized, "invalid api key provided", err)
+		return
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	body := reqBody{}
+	err = decoder.Decode(&body)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't decode request body", err)
+		return
+	}
+
+	if body.Event != "user.upgraded" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	err = cfg.db.UpgradeUser(context.Background(), uuid.MustParse(body.Data.UserId))
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+	} else {
+		w.WriteHeader(http.StatusNoContent)
+	}
 }

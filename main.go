@@ -17,6 +17,7 @@ type apiConfig struct {
 	db             database.Queries
 	platform       string
 	signingSecret  string
+	polkaKey       string
 }
 
 func main() {
@@ -27,6 +28,7 @@ func main() {
 	dbURL := os.Getenv("DB_URL")
 	platform := os.Getenv("PLATFORM")
 	signingSecret := os.Getenv("SIGNING_SECRET")
+	polkaKey := os.Getenv("POLKA_KEY")
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatal("unable to connect to database")
@@ -38,6 +40,7 @@ func main() {
 		db:             *dbqueries,
 		platform:       platform,
 		signingSecret:  signingSecret,
+		polkaKey:       polkaKey,
 	}
 
 	mux := http.NewServeMux()
@@ -58,6 +61,8 @@ func main() {
 	mux.HandleFunc("POST /api/login", apiCfg.handlerLogin)
 	mux.HandleFunc("POST /api/refresh", apiCfg.handlerRefresh)
 	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevoke)
+
+	mux.HandleFunc("POST /api/polka/webhooks", apiCfg.handlerUpgrade)
 
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
 
