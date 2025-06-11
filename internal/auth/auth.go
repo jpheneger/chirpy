@@ -1,7 +1,10 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -66,8 +69,8 @@ func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 		return []byte(MY_SECRET_KEY), nil
 	})
 	if err != nil {
-		log.Fatal("unable to parse token", err)
-		return uuid.UUID{}, err
+		fmt.Printf("unable to parse token: %v\n", err)
+		return uuid.Nil, err
 	}
 
 	if claims, ok := token.Claims.(*MyCustomClaims); ok {
@@ -82,8 +85,22 @@ func GetBearerToken(headers http.Header) (string, error) {
 	authorization := headers.Get("Authorization")
 	if authorization != "" {
 		parts := strings.Split(authorization, "Bearer ")
-		return parts[1], nil
+		token := parts[1]
+		return token, nil
 	} else {
-		return "", errors.New("No authorizzation header provided")
+		return "", errors.New("no authorizzation header provided")
 	}
+}
+
+func MakeRefreshToken() (string, error) {
+	key := make([]byte, 32)
+	n, err := rand.Read(key)
+	if err != nil {
+		fmt.Printf("unable to read bytes - err: %v\n", err)
+		return "", err
+	} else if n == 0 {
+		fmt.Println("unable to read bytes - zero length")
+		return "", errors.New("unable to read bytes - zero length")
+	}
+	return hex.EncodeToString(key), nil
 }

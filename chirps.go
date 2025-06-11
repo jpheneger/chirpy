@@ -29,6 +29,7 @@ func (cfg *apiConfig) handlerAllChirps(w http.ResponseWriter, r *http.Request) {
 	allChirps, err := cfg.db.GetAllChirps(context.Background())
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't get chirps from db", err)
+		return
 	}
 
 	responseBody := resp{}
@@ -78,16 +79,26 @@ func (cfg *apiConfig) handlerChirps(w http.ResponseWriter, r *http.Request) {
 
 	token, err := auth.GetBearerToken(r.Header)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "invalid authorization token provided - expected: 'Authorization: Bearer <TOKEN>'", err)
+		respondWithError(w, http.StatusUnauthorized, "invalid authorization token provided", err)
+		return
 	}
+
+	matches, _ := regexp.Match("[0-9a-f]{64}", []byte(token))
+	if matches {
+		respondWithError(w, http.StatusUnauthorized, "Attempting to use refresh token as access token", err)
+		return
+	}
+
 	userId, err := auth.ValidateJWT(token, cfg.signingSecret)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, "invalid authorization token provided - invalid user", err)
+		return
 	}
 
 	user, err := cfg.db.GetUserById(context.Background(), userId)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't fetch user from db", err)
+		return
 	}
 
 	const maxChirpLength = 140
@@ -107,6 +118,7 @@ func (cfg *apiConfig) handlerChirps(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Could not create chirp", err)
+		return
 	}
 
 	respondWithJSON(w, http.StatusCreated, Chirp{

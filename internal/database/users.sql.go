@@ -7,7 +7,6 @@ package database
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/google/uuid"
 )
@@ -26,7 +25,7 @@ RETURNING id, created_at, updated_at, email, hashed_password
 
 type CreateUserParams struct {
 	Email          string
-	HashedPassword sql.NullString
+	HashedPassword string
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
