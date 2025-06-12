@@ -28,3 +28,9 @@ SELECT *
 FROM chirps
 WHERE id = $1
 ;
+
+-- name: GetAllChirpsForUser :many
+SELECT *
+FROM chirps
+WHERE user_id = $1
+;

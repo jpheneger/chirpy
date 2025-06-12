@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -28,14 +29,31 @@ type Chirp struct {
 func (cfg *apiConfig) handlerAllChirps(w http.ResponseWriter, r *http.Request) {
 	type resp []Chirp
 
-	allChirps, err := cfg.db.GetAllChirps(context.Background())
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't get chirps from db", err)
-		return
+	authorId := r.URL.Query().Get("author_id")
+	sortDir := r.URL.Query().Get("sort")
+	if sortDir == "" {
+		sortDir = "asc"
+	}
+
+	var chirps []database.Chirp
+	if authorId == "" {
+		allChirps, err := cfg.db.GetAllChirps(context.Background())
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Couldn't get all chirps from db", err)
+			return
+		}
+		chirps = allChirps
+	} else {
+		allChirps, err := cfg.db.GetAllChirpsForUser(context.Background(), uuid.MustParse(authorId))
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Couldn't get all chirps for user from db", err)
+			return
+		}
+		chirps = allChirps
 	}
 
 	responseBody := resp{}
-	for _, _chirp := range allChirps {
+	for _, _chirp := range chirps {
 		responseBody = append(responseBody, Chirp{
 			Id:        _chirp.ID,
 			CreatedAt: _chirp.CreatedAt,
@@ -43,6 +61,12 @@ func (cfg *apiConfig) handlerAllChirps(w http.ResponseWriter, r *http.Request) {
 			Body:      _chirp.Body,
 			UserId:    _chirp.UserID,
 		})
+	}
+
+	if sortDir == "asc" {
+		sort.Slice(responseBody, func(i, j int) bool { return responseBody[i].CreatedAt.Before(responseBody[j].CreatedAt) })
+	} else {
+		sort.Slice(responseBody, func(i, j int) bool { return responseBody[i].CreatedAt.After(responseBody[j].CreatedAt) })
 	}
 
 	respondWithJSON(w, http.StatusOK, responseBody)
